@@ -44,3 +44,41 @@ grant all privileges on rdaddrbook.* to addrbook@'%' identified by 'rdaddrbook';
 grant all privileges on rdaddrbook.* to addrbook@'localhost' identified by 'rdaddrbook';
 ```
 
+## Get Application Source Code
+- Clone from this Repo
+
+## Application Configuration
+### Database Hostname
+- Update Database Hostname depending on your environment
+- File: src/main/resources/application.properties
+### Database credentials
+- Update Database username, password
+- File: src/main/resources/application.properties
+
+## Build Application
+- Use Maven Command:
+```
+cd RDAddrBook
+mvn -DskipTests clean install
+```
+
+## Run Application
+- Start application
+```
+cd RDAddrBook
+java -jar target/RDAddrBook-0.0.1-SNAPSHOT.jar
+```
+
+## Verification
+### Create a Contact resource
+```
+curl "http://ec2-18-183-105-92.ap-northeast-1.compute.amazonaws.com:9080/api/contacts" \
+  -X POST \
+  -d "{\n  \"firstName\": \"Ganesh\",\n  \"lastName\": \"Sharma\",\n  \"groupName\": \"Friends\",\n  \"organization\": \"IBM\",\n  \"job\": \"Architect\",\n  \"notes\": \"some notes\"\n}" \
+  -H "content-type: application/json" 
+```
+### Get all Contact resources
+```
+curl "http://ec2-18-183-105-92.ap-northeast-1.compute.amazonaws.com:9080/api/contacts"
+```
+
