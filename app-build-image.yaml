@@ -49,17 +49,23 @@ Resources:
                     - systemctl start mariadb
                     - systemctl enable mariadb
                     - aws s3 cp s3://rd-kyndryl-bucket1/secure_mysql.sh /tmp/
-                    - chmod +x /tmp/secure_mysql.sh
+                    - aws s3 cp s3://rd-kyndryl-bucket1/launch_secure_mysql.sh /tmp/
                     - REGION=$(curl http://169.254.169.254/latest/meta-data/placement/region)
-                    - ROOT_PASSWORD=$(aws ssm get-parameters --names /rd/addrbook/db/root/password --region $REGION | jq -r '.Parameters[0].Value')
-                    - /tmp/secure_mysql.sh
+                    - export MYSQL_PWD=$(aws ssm get-parameters --names /rd/addrbook/db/root/password --region $REGION | jq -r '.Parameters[0].Value')
+                    - chmod +x /tmp/secure_mysql.sh
+                    - chmod +x /tmp/launch_secure_mysql.sh $MYSQL_PWD
+                    - /tmp/launch_secure_mysql.sh
+                    - rm -f /tmp/launch_secure_mysql.sh
+                    - aws s3 cp s3://rd-kyndryl-bucket1/rdaddrbook_db_schema.sql /tmp/
+                    - /usr/bin/mysql -u root < /tmp/rdaddrbook_db_schema.sql
+                    - unset MYSQL_PWD
                     - aws s3 cp s3://rd-kyndryl-bucket1/codecommit_repo.zip /opt/
                     - unzip /opt/codecommit_repo.zip
                     - cd /opt/RDAddrBook
                     - sed -i -e "s~DB_HOST~$HOSTNAME~g" src/main/resources/application.properties
                     - echo "[Unit]" > /etc/systemd/system/rdaddrbook.service
                     - echo "Description=Sample Spring Boot JPA Application" >> /etc/systemd/system/rdaddrbook.service
-                    - echo "After=syslog.target" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "After=syslog.target,mariadb" >> /etc/systemd/system/rdaddrbook.service
                     - echo "" >> /etc/systemd/system/rdaddrbook.service
                     - echo "[Service]" >> /etc/systemd/system/rdaddrbook.service
                     - echo "User=root" >> /etc/systemd/system/rdaddrbook.service
