@@ -1,0 +1,12 @@
+version: 0.1
+
+phases:
+  build:
+    commands:
+      - mvn -DskipTests clean
+  post_build:
+    commands:
+      - mvn -DskipTests package
+  artifacts:
+    files:
+      - target/RDAddrBook-0.0.1-SNAPSHOT.jar

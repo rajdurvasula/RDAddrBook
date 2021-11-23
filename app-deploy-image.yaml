@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploy Image
+Parameters:
+  AmiId:
+    Type: String
+    Description: AMI ID to be deployed
+  Version:
+    Type: String
+    Description: Version of Application
+  SourceAuthorDate:
+    Type: String
+    Description: Source Author Date provided by CodeCommit
+  SourceBranchName:
+    Type: String
+    Description: Source Branch Name provided by CodeCommit
+  SourceCommitId:
+    Type: String
+    Description: Source Commit Id provided by CodeCommit
+  SourceCommitMessage:
+    Type: String
+    Description: Source Commit Message provided by CodeCommit
+  SourceCommitterDate:
+    Type: String
+    Description: Source Commit Date provided by CodeCommit
+  SourceRepositoryName:
+    Type: String
+    Description: Source Repository Name provided by CodeCommit
+  Subnets:
+    Type: String
+    Description: Subnets where ASG should deploy new instances
+  InstanceType:
+    Type: String
+    Description: EC2 Instance Type 
+Resources:
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${AWS::StackName}-LT'
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        BlockDeviceMappings:
+          - DeviceName: '/dev/xvda'
+            Ebs:
+              DeleteOnTermination: true
+              Encrypted: true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Application
+                Value: !Sub
+                  - '${ShortName}'
+                  - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+              - Key: Name
+                Value: !Sub
+                  - '${ShortName} version ${Version}'
+                  - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+              - Key: Version
+                Value: !Sub '${Version}'
+              - Key: 'Source/AuthorDate'
+                Value: !Sub '${SourceAuthorDate}'
+              - Key: 'Source/BranchName'
+                Value: !Sub '${SourceBranchName}'
+              - Key: 'Source/CommitId'
+                Value: !Sub '${SourceCommitId}'
+              - Key: 'Source/CommitMessage'
+                Value: !Sub '${SourceCommitMessage}'
+              - Key: 'Source/CommitterDate'
+                Value: !Sub '${SourceCommitterDate}'
+              - Key: 'Source/RepositoryName'
+                Value: !Sub '${RepositoryName}'
+          - ResourceType: volume
+            Tags:
+              - Key: Application
+                Value: !Sub
+                  - '${ShortName}'
+                  - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+              - Key: Name
+                Value: !Sub
+                  - '${ShortName} version ${Version}'
+                  - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+  AppASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: '0'
+      MaxSize: '3'
+      DesiredCapacity: '1'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier: !Split [ ',', !Sub '${Subnets}' ]
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 2
+        PauseTime: PT10S
+
+
+    
+
+
+ 

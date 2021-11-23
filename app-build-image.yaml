@@ -1,0 +1,125 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Build Image
+Parameters:
+  BucketName:
+    Type: String
+    Description: S3 Bucket containing build artifacts
+  ObjectKey:
+    Type: String
+    Description: S3 Object Key
+  Version:
+    Type: String
+    Description: Version number of EC2 Image Builder Component
+  Architecture:
+    Type: String
+    Description: Processor architecture
+  InstanceType:
+    Type: String
+    Description: EC2 Instance Type
+  InstanceProfile:
+    Type: String
+    Description: EC2 Instance Profile
+Resources:
+  AppComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub '${AWS::StackName}-Component'
+      Platform: Linux
+      Version: !Sub '${Version}'
+      Description: !Sub
+        - "${ShortName}-Component"
+        - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+      ChangeDescription: !Sub
+        - "Update ${ShortName} Image (${Architecture}) to Version ${Version}"
+        - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+      Data: !Sub |
+        name: Spring Boot Application on Amazon Linux 2
+        description: Current version - ${Version}
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: Prepare Application Deployable
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - sudo su
+                    - cd /opt
+                    - yum -y install java-1.8.0-openjdk git maven mariadb mariadb-server expect jq unzip
+                    - systemctl start mariadb
+                    - systemctl enable mariadb
+                    - aws s3 cp s3://rd-kyndryl-bucket1/secure_mysql.sh /tmp/
+                    - chmod +x /tmp/secure_mysql.sh
+                    - REGION=$(curl http://169.254.169.254/latest/meta-data/placement/region)
+                    - ROOT_PASSWORD=$(aws ssm get-parameters --names /rd/addrbook/db/root/password --region $REGION | jq -r '.Parameters[0].Value')
+                    - /tmp/secure_mysql.sh
+                    - aws s3 cp s3://rd-kyndryl-bucket1/codecommit_repo.zip /opt/
+                    - unzip /opt/codecommit_repo.zip
+                    - cd /opt/RDAddrBook
+                    - sed -i -e "s~DB_HOST~$HOSTNAME~g" src/main/resources/application.properties
+                    - echo "[Unit]" > /etc/systemd/system/rdaddrbook.service
+                    - echo "Description=Sample Spring Boot JPA Application" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "After=syslog.target" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "[Service]" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "User=root" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "Group=root" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "WorkingDirectory=/opt/RDAddrBook" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "ExecStart=/usr/bin/java -jar /opt/RDAddrBook/target/RDAddrBook-0.0.1-SNAPSHOT.jar" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "SuccessExitStatus=143" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "[Install]" >> /etc/systemd/system/rdaddrbook.service
+                    - echo "WantedBy=multi-user.target" >> /etc/systemd/system/rdaddrbook.service
+                    - systemctl daemon-reload
+                    - systemctl enable rdaddrbook.service
+          - name: validate
+            steps:
+              - name: Validate service enabled
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - systemctl is-enabled rdaddrbook.service
+          - name: test
+            steps:
+              - name: Test service
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - systemctl is-active --quite rdaddrbook.service
+                    - curl --fail http://localhost:9080/
+
+  AppImage:
+    Type: AWS::ImageBuilder::Image
+    Properties:
+      ImageRecipeArn: !GetAtt AppImageRecipe.Arn
+      InfrastructureConfigurationArn: !GetAtt AppInfrastructureConfiguration.Arn
+      EnhancedImageMetadataEnabled: false
+      Tags:
+        Application: 'AppImageBuilder'
+  AppImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub
+        - '${ShortName}-AppRecipe'
+        - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+      Description: !Sub
+        - '${ShortName} Image (${Architecture}) version ${Version}'
+        - ShortName: !Select [0, !Split ['-', !Ref AWS::StackName]]
+      Components:
+        - ComponentArn: !GetAtt AppComponent
+      ParentImage: !Sub 'arn:aws:imagebuilder:${AWS::Region}:aws:image/amazon-linux-2-${Architecture}/x.x.x'
+      Version: !Sub '${Version}'
+  AppInfrastructureConfiguration:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub '${AWS::StackName}-AppInfra' 
+      InstanceProfileName: !Sub '${InstanceProfile}'
+      InstanceTypes:
+        - !Sub '${InstanceType}'
+Outputs:
+  AppImageArn:
+    Description: Application AMI Arn
+    Value: !GetAtt AppImage.Arn
+  AppImageId:
+    Description: Application AMI ID
+    Value: !GetAtt AppImage.ImageId
